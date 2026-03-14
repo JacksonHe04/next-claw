@@ -1,4 +1,5 @@
 import { promises as fs } from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 
@@ -54,11 +55,23 @@ export class TraceSession {
       events: this.events,
     };
 
-    const traceDir = path.resolve(process.cwd(), "output", "traces");
-    await fs.mkdir(traceDir, { recursive: true });
-    const tracePath = path.join(traceDir, `${this.id}.json`);
-    await fs.writeFile(tracePath, JSON.stringify(envelope, null, 2), "utf8");
-    return tracePath;
+    const traceDirs = [
+      path.resolve(process.cwd(), "output", "traces"),
+      path.join(os.tmpdir(), "claw-traces"),
+    ];
+
+    for (const traceDir of traceDirs) {
+      try {
+        await fs.mkdir(traceDir, { recursive: true });
+        const tracePath = path.join(traceDir, `${this.id}.json`);
+        await fs.writeFile(tracePath, JSON.stringify(envelope, null, 2), "utf8");
+        return tracePath;
+      } catch {
+        // Try next candidate directory.
+      }
+    }
+
+    throw new Error("Unable to persist trace file in writable directories");
   }
 }
 

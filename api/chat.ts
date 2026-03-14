@@ -84,7 +84,15 @@ export async function POST(req: Request): Promise<Response> {
         trace.log("api.response.error", { error: errorMessage });
       } finally {
         controller.close();
-        const tracePath = await trace.persist({ status: failed ? "failed" : "completed" });
+        let tracePath = "not_persisted";
+        try {
+          tracePath = await trace.persist({ status: failed ? "failed" : "completed" });
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          // Keep request flow healthy even when filesystem is readonly in production.
+          // eslint-disable-next-line no-console
+          console.error(`[trace] ${trace.id} persist failed: ${message}`);
+        }
         // Keep a minimal terminal-visible marker for operations troubleshooting.
         // eslint-disable-next-line no-console
         console.info(`[trace] ${trace.id} -> ${tracePath}`);
