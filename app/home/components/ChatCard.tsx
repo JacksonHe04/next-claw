@@ -63,14 +63,14 @@ export function ChatCard({
         ) : null}
       </div>
 
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap gap-2 max-[980px]:flex-nowrap max-[980px]:overflow-x-auto max-[980px]:pr-1 max-[980px]:[scrollbar-width:none]">
         {suggestions.map((question) => (
           <button
             key={question}
             type="button"
             disabled={isStreaming}
             onClick={() => onSuggestionClick(question)}
-            className="cursor-pointer rounded-full border border-[var(--border)] bg-white/50 px-3 py-2 text-[0.86rem] text-[#292d33] transition duration-150 hover:-translate-y-px hover:bg-white/75 disabled:cursor-not-allowed disabled:opacity-50"
+            className="shrink-0 cursor-pointer rounded-full border border-[var(--border)] bg-white/50 px-3 py-2 text-[0.86rem] text-[#292d33] transition duration-150 hover:-translate-y-px hover:bg-white/75 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {question}
           </button>

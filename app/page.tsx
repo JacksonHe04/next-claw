@@ -29,22 +29,15 @@ export default function HomePage() {
   const [questionIndex, setQuestionIndex] = useState(0);
   const [themeIndex, setThemeIndex] = useState(0);
   const [clock, setClock] = useState(INITIAL_CLOCK);
-  const [pupilOffset, setPupilOffset] = useState({ x: 0, y: 0 });
+  const [lookTarget, setLookTarget] = useState({ x: 0, y: 0 });
   const [cursorPos, setCursorPos] = useState({ x: 0, y: 0 });
 
   const scrollerRef = useRef<HTMLDivElement>(null);
-  const dollFaceRef = useRef<HTMLDivElement>(null);
 
   const activeQuestion = QUESTION_PAGES[questionIndex];
   const activeTheme = THEMES[themeIndex];
 
   const shellStyle = useMemo(() => createShellStyle(activeTheme, cursorPos), [activeTheme, cursorPos]);
-  const pupilStyle = useMemo(
-    () => ({
-      transform: `translate(${pupilOffset.x}px, ${pupilOffset.y}px)`,
-    }),
-    [pupilOffset],
-  );
   const canSend = useMemo(() => input.trim().length > 0 && !isStreaming, [input, isStreaming]);
 
   useEffect(() => {
@@ -67,32 +60,13 @@ export default function HomePage() {
 
     const handleMouseMove = (event: MouseEvent) => {
       setCursorPos({ x: event.clientX, y: event.clientY });
-
-      const face = dollFaceRef.current;
-      if (!face) return;
-
-      const rect = face.getBoundingClientRect();
-      const centerX = rect.left + rect.width / 2;
-      const centerY = rect.top + rect.height / 2;
-      const deltaX = event.clientX - centerX;
-      const deltaY = event.clientY - centerY;
-      const distance = Math.hypot(deltaX, deltaY);
-      const maxOffset = 6;
-
-      if (distance === 0) {
-        setPupilOffset({ x: 0, y: 0 });
-        return;
-      }
-
-      const ratio = Math.min(maxOffset / distance, 1);
-      setPupilOffset({
-        x: Number((deltaX * ratio).toFixed(2)),
-        y: Number((deltaY * ratio).toFixed(2)),
-      });
+      const x = Number((((event.clientX / window.innerWidth) * 2 - 1) * 0.95).toFixed(3));
+      const y = Number((((event.clientY / window.innerHeight) * 2 - 1) * 0.95).toFixed(3));
+      setLookTarget({ x, y });
     };
 
     const handleMouseLeave = () => {
-      setPupilOffset({ x: 0, y: 0 });
+      setLookTarget({ x: 0, y: 0 });
     };
 
     window.addEventListener("mousemove", handleMouseMove);
@@ -309,7 +283,7 @@ export default function HomePage() {
       />
 
       <QuestionWheel index={questionIndex} onPrev={prevQuestion} onNext={nextQuestion} />
-      <AgentAvatar stage={agentStage} pupilStyle={pupilStyle} faceRef={dollFaceRef} />
+      <AgentAvatar stage={agentStage} lookTarget={lookTarget} />
 
       <ChatCard
         messages={messages}
