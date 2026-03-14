@@ -75,8 +75,26 @@ export default function HomePage() {
       });
 
       if (!response.ok || !response.body) {
-        const error = await response.text();
-        throw new Error(error || "request failed");
+        const contentType = response.headers.get("content-type")?.toLowerCase() ?? "";
+        let message = `HTTP ${response.status}${response.statusText ? ` ${response.statusText}` : ""}`;
+
+        if (contentType.includes("application/json")) {
+          try {
+            const data = (await response.json()) as { error?: string; message?: string };
+            message = data.error || data.message || message;
+          } catch {
+            // keep fallback message
+          }
+        } else {
+          const text = await response.text();
+          if (contentType.includes("text/html")) {
+            message = `${message}（服务端返回了 HTML 错误页）`;
+          } else if (text.trim()) {
+            message = text.trim().slice(0, 220);
+          }
+        }
+
+        throw new Error(message);
       }
 
       const reader = response.body.getReader();
