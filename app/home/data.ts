@@ -6,7 +6,7 @@ export const INITIAL_CLOCK: ClockState = {
 };
 
 export const INITIAL_AGENT_TEXT =
-  "你好，我是 Claw。你可以问我任何关于锦诚的问题，也可以和我讨论 AI、产品或技术。";
+  "你好，我是 Claw。你可以直接问我任何关于你的问题，也可以和我讨论 AI、产品或技术。";
 
 export const NOTION_URL = "https://jacksonhe.notion.site/inon";
 
@@ -14,30 +14,30 @@ export const QUESTION_PAGES: QuestionPage[] = [
   {
     title: "memory-driven agent",
     focus: "Focus. AI Agent",
-    question: "他的 Memory 机制是怎么实现的？",
+    question: "你的 Memory 机制是怎么实现的？",
   },
   {
     title: "product intuition",
     focus: "Focus. Product",
-    question: "他对 AI 产品设计的核心判断是什么？",
+    question: "你对 AI 产品设计的核心判断是什么？",
   },
   {
     title: "build in public",
     focus: "Focus. Engineering",
-    question: "有哪些项目是他亲自做的？",
+    question: "有哪些项目是你亲自做的？",
   },
   {
     title: "career narrative",
     focus: "Focus. Career",
-    question: "他的职业路径里最关键的转折点是什么？",
+    question: "你的职业路径里最关键的转折点是什么？",
   },
 ];
 
 export const CHAT_SUGGESTED_QUESTIONS = [
-  "他为什么长期关注 Agent 方向？",
-  "他在美团时做过哪些关键项目？",
-  "他如何平衡产品体验与研发效率？",
-  "如果加入他的团队，最看重什么能力？",
+  "你为什么长期关注 Agent 方向？",
+  "你在美团时做过哪些关键项目？",
+  "你如何平衡产品体验与研发效率？",
+  "如果加入你的团队，最看重什么能力？",
 ];
 
 export const THEMES: ThemeSwatch[] = [
@@ -108,7 +108,7 @@ export const THEMES: ThemeSwatch[] = [
 ];
 
 export const THINKING_MAP: Record<string, string> = {
-  search_memory: "我在翻翻他的记忆……",
+  search_memory: "我在翻翻你的记忆……",
   reasoning: "让我想想……",
   compose: "我整理一下答案……",
 };

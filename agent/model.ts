@@ -1,6 +1,7 @@
 import OpenAI from "openai";
-import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
+import type { ResponseInputItem } from "openai/resources/responses/responses";
 import type { AgentConfig } from "../config/agent.config";
+import type { TraceSession } from "./trace";
 
 function normalizeBaseUrl(baseUrl: string): string {
   return baseUrl.replace(/\/$/, "");
@@ -17,37 +18,77 @@ function createClient(config: AgentConfig): OpenAI {
   });
 }
 
-export async function callLLM(messages: ChatCompletionMessageParam[], config: AgentConfig): Promise<string> {
+export async function callLLM(
+  input: ResponseInputItem[],
+  instructions: string,
+  config: AgentConfig,
+  trace?: TraceSession,
+): Promise<string> {
   const client = createClient(config);
-  const completion = await client.chat.completions.create({
+  trace?.log("model.request", {
+    mode: "non_stream",
     model: config.model,
     temperature: config.temperature,
-    max_tokens: config.maxTokens,
-    messages,
-    reasoning_effort: "minimal",
+    maxTokens: config.maxTokens,
+    instructions,
+    input,
+  });
+  const response = await client.responses.create({
+    model: config.model,
+    instructions,
+    input,
+    temperature: config.temperature,
+    max_output_tokens: config.maxTokens,
+    reasoning: { effort: "minimal" },
   });
 
-  return completion.choices[0]?.message?.content?.trim() ?? "";
+  const text = response.output_text?.trim() ?? "";
+  trace?.log("model.response", {
+    mode: "non_stream",
+    responseId: response.id,
+    usage: response.usage,
+    text,
+  });
+  return text;
 }
 
 export async function* callLLMStream(
-  messages: ChatCompletionMessageParam[],
+  input: ResponseInputItem[],
+  instructions: string,
   config: AgentConfig,
+  trace?: TraceSession,
 ): AsyncGenerator<string> {
   const client = createClient(config);
-  const stream = await client.chat.completions.create({
+  trace?.log("model.request", {
+    mode: "stream",
     model: config.model,
     temperature: config.temperature,
-    max_tokens: config.maxTokens,
-    messages,
+    maxTokens: config.maxTokens,
+    instructions,
+    input,
+  });
+  const stream = await client.responses.create({
+    model: config.model,
+    instructions,
+    input,
+    temperature: config.temperature,
+    max_output_tokens: config.maxTokens,
     stream: true,
-    reasoning_effort: "minimal",
+    reasoning: { effort: "minimal" },
   });
 
+  let fullText = "";
+  let eventCount = 0;
   for await (const chunk of stream) {
-    const delta = chunk.choices[0]?.delta?.content;
-    if (delta) {
-      yield delta;
+    eventCount += 1;
+    if (chunk.type === "response.output_text.delta" && chunk.delta) {
+      fullText += chunk.delta;
+      yield chunk.delta;
     }
   }
+  trace?.log("model.response", {
+    mode: "stream",
+    eventCount,
+    text: fullText,
+  });
 }

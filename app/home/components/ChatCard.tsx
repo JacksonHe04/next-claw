@@ -81,7 +81,7 @@ export function ChatCard({
         <input
           value={input}
           onChange={(event) => onInputChange(event.target.value)}
-          placeholder="问我任何关于锦诚的问题…"
+          placeholder="问我任何关于你的问题…"
           disabled={isStreaming}
           className="border-none bg-transparent px-2 text-[#1e232a] outline-none placeholder:text-[#5b6575]"
         />

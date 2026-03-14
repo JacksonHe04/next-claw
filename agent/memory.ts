@@ -8,6 +8,7 @@ export type WorkspaceMemory = {
   projects: string;
   personality: string;
   faq: string;
+  documents: Array<{ name: string; content: string }>;
   extras: Array<{ name: string; content: string }>;
 };
 
@@ -52,7 +53,9 @@ export async function loadWorkspaceMemory(workspaceDir: string): Promise<Workspa
   );
 
   const extras: Array<{ name: string; content: string }> = [];
+  const documents: Array<{ name: string; content: string }> = [];
   for (const fileName of markdownFiles) {
+    documents.push({ name: fileName, content: contentsByName.get(fileName) ?? "" });
     if (!CORE_FILES.includes(fileName as (typeof CORE_FILES)[number])) {
       extras.push({ name: fileName, content: contentsByName.get(fileName) ?? "" });
     }
@@ -65,6 +68,7 @@ export async function loadWorkspaceMemory(workspaceDir: string): Promise<Workspa
     projects: contentsByName.get("projects.md") ?? "",
     personality: contentsByName.get("personality.md") ?? "",
     faq: contentsByName.get("faq.md") ?? "",
+    documents,
     extras,
   };
 }
