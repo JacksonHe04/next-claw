@@ -1,54 +1,69 @@
-# Claw Agent Backend (Next.js V1)
+# Claw Agent (Next.js)
 
-Claw is JinCheng He's recruiter-facing AI agent.
+Claw 是一个基于 `workspace/*.md` 记忆文件驱动的个人 AI Agent Web 应用。\
+当前实现包含完整链路：前端聊天 UI、SSE 流式返回、上下文组装、模型调用。
 
-## Scope (V1)
+## 当前能力
 
-- Workspace memory from markdown files
-- Context injection
-- LLM chat runtime
-- `POST /api/chat`
-- Minimal retro terminal-style web chat UI
+- 从 `workspace` 目录读取 Markdown 记忆
+- 将系统提示词 + 记忆 + 用户问题拼接为单一上下文
+- 支持模型接口：`OpenAI-compatible`（`POST {baseUrl}/chat/completions`）
+- `POST /api/chat` 以 `text/event-stream` 返回分段回答
+- Next.js 前端聊天界面（含状态提示与流式渲染）
 
-No database, no vector search, no analytics, no tools.
+不包含数据库、向量检索、工具调用、会话持久化。
 
-## Project Structure
+## 技术栈
+
+- Next.js 15
+- React 19
+- TypeScript 5
+
+## 目录结构
 
 ```txt
-Claw-agent/
+next-claw/
   agent/
-    runtime.ts
-    context.ts
-    memory.ts
-    prompt.ts
-    model.ts
-  workspace/
-    identity.md
-    worldview.md
-    resume.md
-    projects.md
-    personality.md
-    faq.md
+    runtime.ts          # 入口：runAgent
+    memory.ts           # 读取 workspace/*.md
+    context.ts          # 拼接上下文文本
+    prompt.ts           # BASE_SYSTEM_PROMPT
+    model.ts            # 调用模型（OpenAI-compatible / Anthropic）
   api/
-    chat.ts
+    chat.ts             # 核心 API（SSE）
   app/
-    api/chat/route.ts
+    api/chat/route.ts   # Next Route Handler，转发到 api/chat.ts
+    page.tsx            # 聊天页面
+    globals.css         # 页面样式
     layout.tsx
-    page.tsx
-    globals.css
-  config/agent.config.ts
+  config/
+    agent.config.ts     # 模型与运行参数
+  workspace/            # 记忆库（Markdown）
 ```
 
-## Setup (pnpm)
+## 快速开始
+
+1. 安装依赖
 
 ```bash
 pnpm install
+```
+
+1. 配置环境变量（参考 `.env.example`）
+
+```bash
+API_KEY=your_api_key
+```
+
+1. 启动开发环境
+
+```bash
 pnpm dev
 ```
 
-Open http://localhost:3000
+访问 <http://localhost:3000>
 
-## Build
+## 构建与运行
 
 ```bash
 pnpm typecheck
@@ -56,34 +71,73 @@ pnpm build
 pnpm start
 ```
 
-## Env
+## 配置说明
 
-Use `.env.example` as reference.
+配置文件：`config/agent.config.ts`
 
-Required:
+- `model`：模型名称
+- `baseUrl`：模型服务地址（默认是火山引擎 Ark 兼容地址）
+- `temperature`：采样温度
+- `maxTokens`：最大输出 token
+- `workspaceDir`：记忆目录（默认 `process.cwd()/workspace`）
+- `apiKey`：读取 `process.env.API_KEY`
 
-- `API_KEY`
+## Workspace Memory 规则
 
-Model and runtime settings are configured in:
+`agent/memory.ts` 会读取 `workspace` 目录下所有 `.md` 文件：
 
-- `config/agent.config.ts`
+- 核心文件（固定字段）：`identity.md`
+- `worldview.md`
+- `resume.md`
+- `projects.md`
+- `personality.md`
+- `faq.md`
+- 其他 `.md` 将作为 `extras` 自动注入上下文（按文件名排序）
+- 缺失文件会被当作空字符串，不会阻塞启动
 
-## API
+## 请求流程
 
-`POST /api/chat`
+1. 前端 `app/page.tsx` 向 `POST /api/chat` 发送 `{ message }`
+2. `api/chat.ts` 调用 `runAgent(message)`
+3. `runAgent` 执行：读取 workspace 记忆、组装完整 prompt、调用模型并拿到回复
+4. API 以 SSE 事件流返回：
+
+- `status`（`search_memory` / `reasoning` / `compose`）
+- `delta`（文本分片）
+- `done`（完成）
+- `error`（异常）
+
+## API 协议
+
+### `POST /api/chat`
 
 Request:
 
 ```json
 {
-  "message": "Why should we hire JinCheng?"
+  "message": "他在美团做了什么？"
 }
 ```
 
-Response:
+Response: `text/event-stream`
 
-```json
-{
-  "reply": "..."
-}
+示例事件：
+
+```txt
+event: status
+data: {"stage":"search_memory"}
+
+event: delta
+data: {"text":"..."}
+
+event: done
+data: {"ok":true}
 ```
+
+错误场景会返回：
+
+```txt
+event: error
+data: {"error":"..."}
+```
+
