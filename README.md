@@ -60,22 +60,13 @@ pnpm start
 
 Use `.env.example` as reference.
 
-Required key depends on `LOBSTER_PROVIDER`:
+Required:
 
-- `openai` -> `OPENAI_API_KEY`
-- `anthropic` -> `ANTHROPIC_API_KEY`
-- `openrouter` -> `OPENROUTER_API_KEY`
-
-Optional (OpenAI only):
-
-- `OPENAI_BASE_URL`
-
-Optional:
-
-- `LOBSTER_WORKSPACE_DIR` (default auto-detects `./workspace`)
-- `LOBSTER_MODEL`
-- `LOBSTER_TEMPERATURE`
-- `LOBSTER_MAX_TOKENS`
+- `MODEL`
+- `BASE_URL`
+- `API_KEY`
+- `TEMPERATURE`
+- `MAX_TOKENS`
 
 ## API
 
