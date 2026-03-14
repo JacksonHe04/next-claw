@@ -1,5 +1,4 @@
 import path from "node:path";
-import { existsSync } from "node:fs";
 
 export type AgentConfig = {
   model: string;
@@ -10,20 +9,22 @@ export type AgentConfig = {
   baseUrl: string;
 };
 
-export function loadAgentConfig(): AgentConfig {
-  const cwdWorkspace = path.resolve(process.cwd(), "workspace");
-  const nestedWorkspace = path.resolve(process.cwd(), "lobster-agent", "workspace");
+const AGENT_SETTINGS = {
+  model: "doubao-seed-1-8-251228",
+  temperature: 0.4,
+  maxTokens: 800,
+  baseUrl: "https://ark.cn-beijing.volces.com/api/v3",
+} as const;
 
-  const defaultWorkspaceDir = existsSync(cwdWorkspace)
-    ? cwdWorkspace
-    : nestedWorkspace;
+export function loadAgentConfig(): AgentConfig {
+  const defaultWorkspaceDir = path.resolve(process.cwd(), "workspace");
 
   return {
-    model: process.env.MODEL ?? "gpt-4.1",
+    model: AGENT_SETTINGS.model,
     workspaceDir: defaultWorkspaceDir,
-    temperature: Number(process.env.TEMPERATURE ?? 0.4),
-    maxTokens: Number(process.env.MAX_TOKENS ?? 800),
+    temperature: AGENT_SETTINGS.temperature,
+    maxTokens: AGENT_SETTINGS.maxTokens,
     apiKey: process.env.API_KEY,
-    baseUrl: process.env.BASE_URL ?? "https://api.openai.com/v1",
+    baseUrl: AGENT_SETTINGS.baseUrl,
   };
 }

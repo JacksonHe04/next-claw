@@ -1,6 +1,6 @@
-# Lobster Agent Backend (Next.js V1)
+# Claw Agent Backend (Next.js V1)
 
-Lobster is JinCheng He's recruiter-facing AI agent.
+Claw is JinCheng He's recruiter-facing AI agent.
 
 ## Scope (V1)
 
@@ -15,7 +15,7 @@ No database, no vector search, no analytics, no tools.
 ## Project Structure
 
 ```txt
-lobster-agent/
+Claw-agent/
   agent/
     runtime.ts
     context.ts
@@ -62,11 +62,11 @@ Use `.env.example` as reference.
 
 Required:
 
-- `MODEL`
-- `BASE_URL`
 - `API_KEY`
-- `TEMPERATURE`
-- `MAX_TOKENS`
+
+Model and runtime settings are configured in:
+
+- `config/agent.config.ts`
 
 ## API
 
