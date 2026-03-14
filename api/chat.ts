@@ -1,4 +1,4 @@
-import { runAgent } from "../agent/runtime";
+import { runAgentStream } from "../agent/runtime";
 
 type ChatRequest = {
   message?: string;
@@ -15,24 +15,6 @@ const encoder = new TextEncoder();
 function writeEvent(controller: ReadableStreamDefaultController<Uint8Array>, payload: StreamEvent) {
   const block = `event: ${payload.event}\ndata: ${JSON.stringify(payload.data)}\n\n`;
   controller.enqueue(encoder.encode(block));
-}
-
-function splitToChunks(text: string): string[] {
-  const chunks: string[] = [];
-  const words = text.split(/(\s+)/).filter(Boolean);
-  let current = "";
-
-  for (const token of words) {
-    if ((current + token).length > 22 && current) {
-      chunks.push(current);
-      current = token;
-    } else {
-      current += token;
-    }
-  }
-
-  if (current) chunks.push(current);
-  return chunks;
 }
 
 export async function POST(req: Request): Promise<Response> {
@@ -53,15 +35,20 @@ export async function POST(req: Request): Promise<Response> {
     async start(controller) {
       try {
         writeEvent(controller, { event: "status", data: { stage: "search_memory" } });
-        const reply = await runAgent(message);
-
         writeEvent(controller, { event: "status", data: { stage: "reasoning" } });
         writeEvent(controller, { event: "status", data: { stage: "compose" } });
 
-        const chunks = splitToChunks(reply || "我暂时没有生成答案，请再问我一次。");
-        for (const chunk of chunks) {
-          writeEvent(controller, { event: "delta", data: { text: chunk } });
-          await new Promise((resolve) => setTimeout(resolve, 24));
+        let hasDelta = false;
+        for await (const delta of runAgentStream(message)) {
+          hasDelta = true;
+          writeEvent(controller, { event: "delta", data: { text: delta } });
+        }
+
+        if (!hasDelta) {
+          writeEvent(controller, {
+            event: "delta",
+            data: { text: "我暂时没有生成答案，请再问我一次。" },
+          });
         }
 
         writeEvent(controller, { event: "done", data: { ok: true } });

@@ -2,35 +2,21 @@
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 
-type Role = "user" | "agent";
-type AgentStage = "idle" | "thinking" | "speaking";
-
-type ChatMessage = {
-  id: string;
-  role: Role;
-  text: string;
-};
-
-const SUGGESTED_QUESTIONS = [
-  "他在美团做了什么？",
-  "为什么他很关注 AI Agent？",
-  "有哪些项目是他亲自做的？",
-  "他的 Memory 机制是怎么实现的？",
-  "他对 AI 产品设计的核心判断是什么？",
-];
-
-const THINKING_MAP: Record<string, string> = {
-  search_memory: "我在翻翻他的记忆……",
-  reasoning: "让我想想……",
-  compose: "我整理一下答案……",
-};
-
-const INITIAL_AGENT_TEXT =
-  "你好，我是 Claw。你可以问我任何关于锦诚的问题，也可以和我讨论 AI、产品或技术。";
-
-function buildId(prefix: string): string {
-  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-}
+import { AgentAvatar } from "./home/components/AgentAvatar";
+import { ChatCard } from "./home/components/ChatCard";
+import { QuestionWheel } from "./home/components/QuestionWheel";
+import { TopChrome } from "./home/components/TopChrome";
+import {
+  CHAT_SUGGESTED_QUESTIONS,
+  INITIAL_AGENT_TEXT,
+  INITIAL_CLOCK,
+  NOTION_URL,
+  QUESTION_PAGES,
+  THEMES,
+  THINKING_MAP,
+} from "./home/data";
+import { AgentStage, ChatMessage } from "./home/types";
+import { buildId, createShellStyle, getShanghaiClockState } from "./home/utils";
 
 export default function HomePage() {
   const [messages, setMessages] = useState<ChatMessage[]>([
@@ -40,7 +26,26 @@ export default function HomePage() {
   const [thinkingText, setThinkingText] = useState<string | null>(null);
   const [isStreaming, setIsStreaming] = useState(false);
   const [agentStage, setAgentStage] = useState<AgentStage>("idle");
+  const [questionIndex, setQuestionIndex] = useState(0);
+  const [themeIndex, setThemeIndex] = useState(0);
+  const [clock, setClock] = useState(INITIAL_CLOCK);
+  const [pupilOffset, setPupilOffset] = useState({ x: 0, y: 0 });
+  const [cursorPos, setCursorPos] = useState({ x: 0, y: 0 });
+
   const scrollerRef = useRef<HTMLDivElement>(null);
+  const dollFaceRef = useRef<HTMLDivElement>(null);
+
+  const activeQuestion = QUESTION_PAGES[questionIndex];
+  const activeTheme = THEMES[themeIndex];
+
+  const shellStyle = useMemo(() => createShellStyle(activeTheme, cursorPos), [activeTheme, cursorPos]);
+  const pupilStyle = useMemo(
+    () => ({
+      transform: `translate(${pupilOffset.x}px, ${pupilOffset.y}px)`,
+    }),
+    [pupilOffset],
+  );
+  const canSend = useMemo(() => input.trim().length > 0 && !isStreaming, [input, isStreaming]);
 
   useEffect(() => {
     const node = scrollerRef.current;
@@ -48,7 +53,56 @@ export default function HomePage() {
     node.scrollTop = node.scrollHeight;
   }, [messages, thinkingText]);
 
-  const canSend = useMemo(() => input.trim().length > 0 && !isStreaming, [input, isStreaming]);
+  useEffect(() => {
+    setClock(getShanghaiClockState());
+    const timer = window.setInterval(() => {
+      setClock(getShanghaiClockState());
+    }, 1000);
+
+    return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    setCursorPos({ x: window.innerWidth / 2, y: window.innerHeight / 2 });
+
+    const handleMouseMove = (event: MouseEvent) => {
+      setCursorPos({ x: event.clientX, y: event.clientY });
+
+      const face = dollFaceRef.current;
+      if (!face) return;
+
+      const rect = face.getBoundingClientRect();
+      const centerX = rect.left + rect.width / 2;
+      const centerY = rect.top + rect.height / 2;
+      const deltaX = event.clientX - centerX;
+      const deltaY = event.clientY - centerY;
+      const distance = Math.hypot(deltaX, deltaY);
+      const maxOffset = 6;
+
+      if (distance === 0) {
+        setPupilOffset({ x: 0, y: 0 });
+        return;
+      }
+
+      const ratio = Math.min(maxOffset / distance, 1);
+      setPupilOffset({
+        x: Number((deltaX * ratio).toFixed(2)),
+        y: Number((deltaY * ratio).toFixed(2)),
+      });
+    };
+
+    const handleMouseLeave = () => {
+      setPupilOffset({ x: 0, y: 0 });
+    };
+
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseleave", handleMouseLeave);
+
+    return () => {
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseleave", handleMouseLeave);
+    };
+  }, []);
 
   async function sendMessage(raw: string) {
     const content = raw.trim();
@@ -136,12 +190,22 @@ export default function HomePage() {
           }
 
           if (!payload) continue;
+          if (payload === "[DONE]") {
+            setThinkingText(null);
+            setAgentStage("idle");
+            continue;
+          }
 
-          const parsed = JSON.parse(payload) as {
-            stage?: string;
-            text?: string;
-            error?: string;
-          };
+          let parsed: { stage?: string; text?: string; error?: string };
+          try {
+            parsed = JSON.parse(payload) as {
+              stage?: string;
+              text?: string;
+              error?: string;
+            };
+          } catch {
+            continue;
+          }
 
           if (eventName === "status") {
             setThinkingText(THINKING_MAP[parsed.stage ?? ""] ?? "让我想想……");
@@ -190,96 +254,75 @@ export default function HomePage() {
     void sendMessage(input);
   }
 
+  function nextQuestion() {
+    setQuestionIndex((current) => (current + 1) % QUESTION_PAGES.length);
+  }
+
+  function prevQuestion() {
+    setQuestionIndex((current) => (current - 1 + QUESTION_PAGES.length) % QUESTION_PAGES.length);
+  }
+
+  function randomizeTheme() {
+    setThemeIndex((current) => {
+      if (THEMES.length < 2) return current;
+      let next = current;
+      while (next === current) {
+        next = Math.floor(Math.random() * THEMES.length);
+      }
+      return next;
+    });
+  }
+
   return (
-    <main className="page-shell">
-      <section className="claw-wrap">
-        <header className="hero">
-          <h1>Claw</h1>
-          <p className="subtitle">锦诚的个人 AI Agent</p>
-          <p className="description">
-            这是一个基于 Agent Memory 构建的 AI。
-            <br />
-            你可以问它任何关于锦诚的问题，也可以和它讨论 AI、产品或技术。
-          </p>
-          <p className="hint">Claw 使用 workspace memory 与 context injection 构建。</p>
-        </header>
+    <main className="relative h-screen w-full overflow-hidden text-[var(--fg)]" style={shellStyle}>
+      <div
+        aria-hidden
+        className="pointer-events-none fixed inset-0 z-0 animate-bg-shift"
+        style={{
+          background:
+            "radial-gradient(circle at 20% 2%, var(--bg-b), transparent 45%), radial-gradient(circle at 86% 72%, color-mix(in srgb, var(--accent-a), black 4%), transparent 32%), linear-gradient(110deg, var(--bg-a), var(--bg-c))",
+        }}
+      />
+      <div
+        aria-hidden
+        className="pointer-events-none fixed inset-0 z-[1] animate-cloud-float opacity-70"
+        style={{
+          background:
+            "radial-gradient(32vw 24vh at 15% 20%, color-mix(in srgb, var(--mist), white 15%), transparent 65%), radial-gradient(35vw 22vh at 68% 28%, color-mix(in srgb, var(--mist), white 25%), transparent 70%), radial-gradient(30vw 20vh at 36% 70%, var(--mist), transparent 68%), radial-gradient(22vw 16vh at 82% 78%, color-mix(in srgb, var(--mist), white 20%), transparent 70%)",
+        }}
+      />
+      <div
+        aria-hidden
+        className="pointer-events-none fixed inset-0 z-[2] blur-[14px]"
+        style={{
+          background:
+            "radial-gradient(170px 140px at var(--cursor-x) var(--cursor-y), color-mix(in srgb, var(--mist), white 12%), transparent 72%), radial-gradient(260px 210px at var(--cursor-x) var(--cursor-y), color-mix(in srgb, var(--mist), white 42%), transparent 80%)",
+        }}
+      />
 
-        <section className="avatar-zone" aria-label="agent avatar">
-          <div className={`avatar avatar--${agentStage}`}>
-            <span className="avatar-core">C</span>
-            <span className="avatar-ring" />
-          </div>
-        </section>
+      <TopChrome
+        activeQuestion={activeQuestion}
+        clock={clock}
+        notionUrl={NOTION_URL}
+        onRandomizeTheme={randomizeTheme}
+        onAsk={() => void sendMessage(activeQuestion.question)}
+      />
 
-        <section className="chat-card">
-          <div ref={scrollerRef} className="chat-log" aria-live="polite">
-            {messages.map((message) => {
-              const isAgent = message.role === "agent";
-              return (
-                <article
-                  key={message.id}
-                  className={`chat-row ${isAgent ? "chat-row--agent" : "chat-row--user"}`}
-                >
-                  <div className="bubble-wrap">
-                    {isAgent ? <div className="agent-name">Claw</div> : null}
-                    <div className={`bubble ${isAgent ? "bubble--agent" : "bubble--user"}`}>
-                      {message.text || <span className="ghost-text">...</span>}
-                    </div>
-                  </div>
-                </article>
-              );
-            })}
+      <QuestionWheel index={questionIndex} onPrev={prevQuestion} onNext={nextQuestion} />
+      <AgentAvatar stage={agentStage} pupilStyle={pupilStyle} faceRef={dollFaceRef} />
 
-            {thinkingText ? (
-              <article className="chat-row chat-row--agent thinking-row">
-                <div className="bubble-wrap">
-                  <div className="agent-name">Claw</div>
-                  <div className="bubble bubble--agent bubble--thinking">{thinkingText}</div>
-                </div>
-              </article>
-            ) : null}
-          </div>
-
-          <div className="suggestions">
-            {SUGGESTED_QUESTIONS.map((question) => (
-              <button
-                key={question}
-                type="button"
-                className="chip"
-                disabled={isStreaming}
-                onClick={() => void sendMessage(question)}
-              >
-                {question}
-              </button>
-            ))}
-          </div>
-
-          <form className="composer" onSubmit={onSubmit}>
-            <input
-              value={input}
-              onChange={(event) => setInput(event.target.value)}
-              placeholder="问我任何关于锦诚的问题…"
-              disabled={isStreaming}
-            />
-            <button type="submit" disabled={!canSend} aria-label="发送">
-              ↗
-            </button>
-          </form>
-        </section>
-
-        <footer className="footer">
-          <span>了解更多关于锦诚</span>
-          <a href="https://github.com/JacksonHe04" target="_blank" rel="noreferrer">
-            GitHub
-          </a>
-          <a href="https://inon.space" target="_blank" rel="noreferrer">
-            个人网站
-          </a>
-          <a href="https://github.com/JacksonHe04" target="_blank" rel="noreferrer">
-            简历
-          </a>
-        </footer>
-      </section>
+      <ChatCard
+        messages={messages}
+        thinkingText={thinkingText}
+        input={input}
+        isStreaming={isStreaming}
+        canSend={canSend}
+        suggestions={CHAT_SUGGESTED_QUESTIONS}
+        scrollerRef={scrollerRef}
+        onInputChange={setInput}
+        onSuggestionClick={(question) => void sendMessage(question)}
+        onSubmit={onSubmit}
+      />
     </main>
   );
 }
