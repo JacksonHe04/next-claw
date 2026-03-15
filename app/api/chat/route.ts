@@ -7,15 +7,41 @@ type ChatRequest = {
 
 type StreamEvent =
   | { event: "status"; data: { stage: "search_memory" | "reasoning" | "compose" } }
+  | { event: "trace"; data: { step: string; detail: string } }
   | { event: "delta"; data: { text: string } }
   | { event: "done"; data: { ok: true } }
   | { event: "error"; data: { error: string } };
 
 const encoder = new TextEncoder();
+const RATE_LIMIT_WINDOW_MS = 60 * 1000;
+const RATE_LIMIT_MAX = 10;
+const rateBucket = new Map<string, number[]>();
 
 function writeEvent(controller: ReadableStreamDefaultController<Uint8Array>, payload: StreamEvent) {
   const block = `event: ${payload.event}\ndata: ${JSON.stringify(payload.data)}\n\n`;
   controller.enqueue(encoder.encode(block));
+}
+
+function getClientId(req: Request): string {
+  const xff = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
+  const realIp = req.headers.get("x-real-ip")?.trim();
+  return xff || realIp || "unknown";
+}
+
+function checkRateLimit(clientId: string): { ok: true } | { ok: false; retryAfter: number } {
+  const now = Date.now();
+  const start = now - RATE_LIMIT_WINDOW_MS;
+  const hits = (rateBucket.get(clientId) ?? []).filter((ts) => ts > start);
+
+  if (hits.length >= RATE_LIMIT_MAX) {
+    const retryAfter = Math.max(1, Math.ceil((hits[0] + RATE_LIMIT_WINDOW_MS - now) / 1000));
+    rateBucket.set(clientId, hits);
+    return { ok: false, retryAfter };
+  }
+
+  hits.push(now);
+  rateBucket.set(clientId, hits);
+  return { ok: true };
 }
 
 export async function POST(req: Request): Promise<Response> {
@@ -34,6 +60,27 @@ export async function POST(req: Request): Promise<Response> {
     return Response.json(
       { error: "Invalid JSON body", traceId: trace.id },
       { status: 400, headers: { "X-Trace-Id": trace.id } },
+    );
+  }
+
+  const clientId = getClientId(req);
+  const rate = checkRateLimit(clientId);
+  if (!rate.ok) {
+    trace.log("api.request.rate_limited", { clientId, retryAfter: rate.retryAfter });
+    await trace.persist({ status: "rate_limited", retryAfter: rate.retryAfter });
+    return Response.json(
+      {
+        error: `请求过于频繁，请在 ${rate.retryAfter} 秒后重试。`,
+        retryAfter: rate.retryAfter,
+        traceId: trace.id,
+      },
+      {
+        status: 429,
+        headers: {
+          "Retry-After": String(rate.retryAfter),
+          "X-Trace-Id": trace.id,
+        },
+      },
     );
   }
 
@@ -61,7 +108,9 @@ export async function POST(req: Request): Promise<Response> {
         trace.log("api.status", { stage: "compose" });
 
         let hasDelta = false;
-        for await (const delta of runAgentStream(message, undefined, trace)) {
+        for await (const delta of runAgentStream(message, undefined, trace, (event) => {
+          writeEvent(controller, { event: "trace", data: event });
+        })) {
           hasDelta = true;
           finalText += delta;
           writeEvent(controller, { event: "delta", data: { text: delta } });

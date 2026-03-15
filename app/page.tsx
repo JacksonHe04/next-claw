@@ -25,6 +25,8 @@ export default function HomePage() {
   const [input, setInput] = useState("");
   const [thinkingText, setThinkingText] = useState<string | null>(null);
   const [isStreaming, setIsStreaming] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [traceSteps, setTraceSteps] = useState<string[]>([]);
   const [agentStage, setAgentStage] = useState<AgentStage>("idle");
   const [questionIndex, setQuestionIndex] = useState(0);
   const [themeIndex, setThemeIndex] = useState(0);
@@ -91,6 +93,8 @@ export default function HomePage() {
     const agentMsgId = buildId("agent");
     setMessages((prev) => [...prev, userMsg, { id: agentMsgId, role: "agent", text: "" }]);
     setInput("");
+    setNotice(null);
+    setTraceSteps([]);
     setThinkingText("让我想想……");
     setIsStreaming(true);
     setAgentStage("thinking");
@@ -108,8 +112,11 @@ export default function HomePage() {
 
         if (contentType.includes("application/json")) {
           try {
-            const data = (await response.json()) as { error?: string; message?: string };
+            const data = (await response.json()) as { error?: string; message?: string; retryAfter?: number };
             message = data.error || data.message || message;
+            if (response.status === 429) {
+              setNotice(message);
+            }
           } catch {
             // keep fallback message
           }
@@ -170,7 +177,7 @@ export default function HomePage() {
             continue;
           }
 
-          let parsed: { stage?: string; text?: string; error?: string };
+          let parsed: { stage?: string; text?: string; error?: string; step?: string; detail?: string };
           try {
             parsed = JSON.parse(payload) as {
               stage?: string;
@@ -184,6 +191,13 @@ export default function HomePage() {
           if (eventName === "status") {
             setThinkingText(THINKING_MAP[parsed.stage ?? ""] ?? "让我想想……");
             setAgentStage("thinking");
+          }
+
+          if (eventName === "trace" && parsed.detail) {
+            const detail = parsed.detail.trim();
+            if (detail) {
+              setTraceSteps((prev) => [...prev, detail]);
+            }
           }
 
           if (eventName === "delta") {
@@ -291,6 +305,8 @@ export default function HomePage() {
         input={input}
         isStreaming={isStreaming}
         canSend={canSend}
+        notice={notice}
+        traceSteps={traceSteps}
         suggestions={CHAT_SUGGESTED_QUESTIONS}
         scrollerRef={scrollerRef}
         onInputChange={setInput}

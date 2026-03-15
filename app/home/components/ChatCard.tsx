@@ -8,6 +8,8 @@ type Props = {
   input: string;
   isStreaming: boolean;
   canSend: boolean;
+  notice: string | null;
+  traceSteps: string[];
   suggestions: string[];
   scrollerRef: RefObject<HTMLDivElement | null>;
   onInputChange: (value: string) => void;
@@ -21,6 +23,8 @@ export function ChatCard({
   input,
   isStreaming,
   canSend,
+  notice,
+  traceSteps,
   suggestions,
   scrollerRef,
   onInputChange,
@@ -30,6 +34,23 @@ export function ChatCard({
   return (
     <section className="fixed bottom-[18px] left-1/2 z-10 grid h-[min(42vh,420px)] w-[min(980px,calc(100vw-280px))] -translate-x-1/2 grid-rows-[1fr_auto_auto] gap-3 rounded-3xl border border-[var(--border)] bg-[var(--card)] p-4 backdrop-blur-[8px] max-[980px]:bottom-[10px] max-[980px]:left-3 max-[980px]:h-[290px] max-[980px]:w-[calc(100vw-24px)] max-[980px]:translate-x-0">
       <div ref={scrollerRef} aria-live="polite" className="overflow-y-auto pr-1">
+        {notice ? (
+          <div className="mb-3 rounded-xl border border-amber-300/70 bg-amber-50/80 px-3 py-2 text-[0.82rem] text-amber-900">
+            {notice}
+          </div>
+        ) : null}
+
+        {traceSteps.length ? (
+          <div className="mb-3 rounded-xl border border-[var(--border)] bg-white/45 px-3 py-2">
+            <p className="mb-1 text-[0.72rem] uppercase tracking-[0.05em] text-[var(--fg-soft)]">Agent Trace</p>
+            <ul className="m-0 space-y-1 pl-4 text-[0.78rem] text-[var(--fg-soft)]">
+              {traceSteps.slice(-5).map((item, idx) => (
+                <li key={`${item}-${idx}`}>{item}</li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+
         {messages.map((message) => {
           const isAgent = message.role === "agent";
 

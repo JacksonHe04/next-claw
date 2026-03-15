@@ -1,6 +1,6 @@
 import { loadWorkspaceMemory } from "./memory";
 import { BASE_SYSTEM_PROMPT } from "./prompt";
-import { callLLM, callLLMStream } from "./model";
+import { callLLM, callLLMReactStream } from "./model";
 import { loadAgentConfig, type AgentConfig } from "../config/agent.config";
 import type { TraceSession } from "./trace";
 import type { ResponseInputItem } from "openai/resources/responses/responses";
@@ -82,6 +82,7 @@ export async function* runAgentStream(
   question: string,
   configOverride?: Partial<AgentConfig>,
   trace?: TraceSession,
+  onTrace?: (event: { step: string; detail: string }) => void,
 ): AsyncGenerator<string> {
   const config = { ...loadAgentConfig(), ...configOverride };
 
@@ -97,7 +98,7 @@ export async function* runAgentStream(
   });
   trace?.log("runtime.input.built", { itemCount: inputItems.length });
 
-  for await (const delta of callLLMStream(inputItems, instructions, config, trace)) {
+  for await (const delta of callLLMReactStream(inputItems, instructions, config, trace, onTrace)) {
     yield delta;
   }
 }
