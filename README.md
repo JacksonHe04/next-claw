@@ -1,69 +1,87 @@
-# Claw Agent (Next.js)
+# Claw Agent (Next.js + ReAct)
 
-Claw 是一个基于 `workspace/*.md` 记忆文件驱动的个人 AI Agent Web 应用。\
-当前实现包含完整链路：前端聊天 UI、SSE 流式返回、上下文组装、模型调用。
+Claw 是一个基于 `workspace/*.md` 的个人 AI Agent Web 应用。当前版本重点增强了：
 
-## 当前能力
+- 后端限流（按请求来源 1 分钟最多 10 次）
+- ReAct 代理循环（可调用工具并逐轮推理）
+- 前端 Trace 可视化（可看到工具与推理轨迹）
+- 移动端顶部与底部圆形卡片对齐修复
 
-- 从 `workspace` 目录读取 Markdown 记忆
-- 将记忆文档模拟为工具调用结果注入 `responses.input`
-- 使用 OpenAI SDK（可配置 `baseUrl`）调用 `responses.create`
-- `POST /api/chat` 以 `text/event-stream` 返回真实流式增量
-- Next.js 前端聊天界面（含状态提示与流式渲染）
+## 1. 核心能力
 
-不包含数据库、向量检索、工具调用、会话持久化。
+- `POST /api/chat` 使用 SSE 返回实时事件（`status` / `trace` / `delta` / `done` / `error`）
+- 每次请求自动生成 Trace，并持久化到 `output/traces`（不可写时回退到系统临时目录）
+- 内置 ReAct tools：
+  - `search_workspace`：按关键词搜索记忆文档
+  - `read_workspace_doc`：读取指定文档
+  - `get_current_time`：获取上海时区时间
+- 前端展示 Agent trace，回答过程更直观
 
-## 技术栈
+## 2. 限流策略
 
-- Next.js 15
-- React 19
-- TypeScript 5
+- 维度：请求来源 IP（优先 `x-forwarded-for`，其次 `x-real-ip`）
+- 窗口：60 秒
+- 配额：10 次
+- 触发后：返回 `429` + `Retry-After`，前端展示明显提醒
 
-## 目录结构
+> 说明：当前使用进程内存限流，适合单实例部署。多实例建议改为 Redis 等共享存储。
+
+## 3. ReAct 运行模式
+
+Agent 使用“思考 -> 工具调用 -> 观察 -> 继续思考”的循环，最多 8 轮。
+
+典型流程：
+
+1. 模型先决定是否调用工具
+2. 若有 `function_call`：执行本地工具并把结果以 `function_call_output` 回传模型
+3. 无工具调用时输出最终答案
+4. 前端通过 `trace` 事件展示每一轮关键步骤
+
+## 4. 目录结构
 
 ```txt
 next-claw/
   agent/
-    runtime.ts          # 入口：runAgent
+    runtime.ts          # Agent 入口（流式）
+    model.ts            # ReAct 循环与模型调用
+    tools.ts            # 可调用工具定义与执行
     memory.ts           # 读取 workspace/*.md
-    context.ts          # 拼接上下文文本
-    prompt.ts           # BASE_SYSTEM_PROMPT
-    model.ts            # 调用模型（OpenAI SDK）
-  api/
-    chat.ts             # 核心 API（SSE）
+    prompt.ts           # 系统提示词
+    trace.ts            # Trace 会话与落盘
   app/
-    api/chat/route.ts   # Next Route Handler，转发到 api/chat.ts
-    page.tsx            # 聊天页面
-    globals.css         # 页面样式
-    layout.tsx
-  config/
-    agent.config.ts     # 模型与运行参数
-  workspace/            # 记忆库（Markdown）
+    api/chat/route.ts   # SSE API + 限流
+    page.tsx            # 前端主页面
+    home/components/
+      TopChrome.tsx
+      QuestionWheel.tsx
+      AgentAvatar.tsx
+      ChatCard.tsx
+  config/agent.config.ts
+  workspace/*.md        # 记忆文件
 ```
 
-## 快速开始
-
-1. 安装依赖
+## 5. 快速开始
 
 ```bash
 pnpm install
+cp .env.example .env.local
 ```
 
-1. 配置环境变量（参考 `.env.example`）
+设置环境变量：
 
 ```bash
 API_KEY=your_api_key
 ```
 
-1. 启动开发环境
+启动开发：
 
 ```bash
 pnpm dev
 ```
 
-访问 <http://localhost:3000>
+访问：<http://localhost:3000>
 
-## 构建与运行
+## 6. 常用命令
 
 ```bash
 pnpm typecheck
@@ -71,80 +89,31 @@ pnpm build
 pnpm start
 ```
 
-## 配置说明
-
-配置文件：`config/agent.config.ts`
-
-- `model`：模型名称
-- `baseUrl`：模型服务地址（默认是火山引擎 Ark 兼容地址）
-- `temperature`：采样温度
-- `maxTokens`：最大输出 token
-- `workspaceDir`：记忆目录（默认 `process.cwd()/workspace`）
-- `apiKey`：读取 `process.env.API_KEY`
-
-## Workspace Memory 规则
-
-`agent/memory.ts` 会读取 `workspace` 目录下所有 `.md` 文件：
-
-- 核心文件（固定字段）：`identity.md`
-- `worldview.md`
-- `resume.md`
-- `projects.md`
-- `personality.md`
-- `faq.md`
-- 其他 `.md` 将作为 `extras` 自动注入上下文（按文件名排序）
-- 缺失文件会被当作空字符串，不会阻塞启动
-
-## 请求流程
-
-1. 前端 `app/page.tsx` 向 `POST /api/chat` 发送 `{ message }`
-2. `api/chat.ts` 调用 `runAgentStream(message)`
-3. `runAgentStream` 执行：读取 workspace 记忆、按文档生成工具调用消息、最后追加用户 prompt、调用模型流式接口
-4. API 以 SSE 事件流返回：
-
-- `status`（`search_memory` / `reasoning` / `compose`）
-- `delta`（模型实时增量 token）
-- `done`（完成）
-- `error`（异常）
-
-## API 协议
+## 7. API 简要
 
 ### `POST /api/chat`
 
-Request:
+请求：
 
 ```json
-{
-  "message": "他在美团做了什么？"
-}
+{ "message": "他最近在做什么？" }
 ```
 
-Response: `text/event-stream`
+成功响应：`text/event-stream`
 
-响应头包含 `X-Trace-Id`，可用于定位本次调用的完整链路日志。
+- `event: status`
+- `event: trace`
+- `event: delta`
+- `event: done`
 
-示例事件：
+限流响应：
 
-```txt
-event: status
-data: {"stage":"search_memory"}
+- HTTP `429`
+- Header: `Retry-After`
+- JSON: `{ error, retryAfter, traceId }`
 
-event: delta
-data: {"text":"..."}
+## 8. 后续建议
 
-event: done
-data: {"ok":true}
-```
-
-错误场景会返回：
-
-```txt
-event: error
-data: {"error":"..."}
-```
-
-## Trace 与监控
-
-- 每次 `POST /api/chat` 都会生成一个 `traceId`
-- 全链路事件会落盘到 `output/traces/<traceId>.json`
-- Trace 内容包含：请求入参、memory 检索结果、模型请求 payload、最终响应、异常信息（不记录逐 token delta）
+- 将限流迁移到 Redis（支持多实例）
+- Trace 增加可折叠时间线与阶段耗时
+- Tools 增加网页检索/知识库检索/外部 API

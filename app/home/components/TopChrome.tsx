@@ -14,7 +14,7 @@ export function TopChrome({ activeQuestion, clock, onRandomizeTheme, onAsk, noti
   return (
     <>
       <div className="fixed left-6 top-[18px] z-10 max-[980px]:left-[10px] max-[980px]:top-[10px]">
-        <div className="inline-flex items-center gap-[9px] text-[0.7rem] uppercase tracking-[0.06em]">
+        <div className="inline-flex h-6 items-center gap-[9px] text-[0.7rem] uppercase tracking-[0.06em]">
           <span className="font-semibold">C</span>
           <span className="font-semibold">/</span>
           <span className="font-semibold">L</span>
@@ -22,7 +22,7 @@ export function TopChrome({ activeQuestion, clock, onRandomizeTheme, onAsk, noti
         </div>
       </div>
 
-      <div className="fixed right-6 top-[18px] z-10 inline-flex items-center gap-2.5 text-[0.7rem] uppercase tracking-[0.06em] max-[980px]:right-[10px] max-[980px]:top-[10px] max-[980px]:justify-end">
+      <div className="fixed right-6 top-[18px] z-10 inline-flex h-6 items-center gap-2.5 text-[0.7rem] uppercase tracking-[0.06em] max-[980px]:right-[10px] max-[980px]:top-[10px] max-[980px]:justify-end">
         <a href={notionUrl} target="_blank" rel="noreferrer" className="opacity-80 hover:opacity-100">
           NOTION
         </a>
